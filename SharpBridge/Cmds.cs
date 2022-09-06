@@ -22,9 +22,15 @@ public static class Cmds
         }
     }
 
-    public static Cmd? Get(string id) => All.TryGetValue(id, out var cmd) ? cmd : null;
+    public static Cmd? Get(string id)
+    {
+        return All.TryGetValue(id, out var cmd) ? cmd : null;
+    }
 
-    public static T? Get<T>() where T : Cmd => AllByType.TryGetValue(typeof(T), out var cmd) ? (T)cmd : null;
+    public static T? Get<T>() where T : Cmd
+    {
+        return AllByType.TryGetValue(typeof(T), out var cmd) ? (T)cmd : null;
+    }
 }
 
 public abstract class Cmd

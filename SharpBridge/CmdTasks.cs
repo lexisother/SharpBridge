@@ -10,9 +10,15 @@ public static class CmdTasks
 {
     private static readonly Dictionary<string, CmdTask> All = new();
 
-    public static void Add(CmdTask task) => All[task.ID] = task;
+    public static void Add(CmdTask task)
+    {
+        All[task.ID] = task;
+    }
 
-    public static void Remove(CmdTask task) => All.Remove(task.ID);
+    public static void Remove(CmdTask task)
+    {
+        All.Remove(task.ID);
+    }
 
     public static CmdTask? Remove(string id)
     {
@@ -22,7 +28,10 @@ public static class CmdTasks
         return task;
     }
 
-    public static CmdTask? Get(string id) => All.TryGetValue(id, out var task) ? task : null;
+    public static CmdTask? Get(string id)
+    {
+        return All.TryGetValue(id, out var task) ? task : null;
+    }
 }
 
 public class CmdTask : IDisposable

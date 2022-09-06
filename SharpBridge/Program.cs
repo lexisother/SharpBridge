@@ -32,7 +32,6 @@ public static class Program
         var verbose = false;
 
         for (var i = 1; i < args.Length; i++)
-        {
             switch (args[i])
             {
                 case "--debug":
@@ -45,7 +44,6 @@ public static class Program
                     AllocConsole();
                     break;
             }
-        }
 
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 
@@ -53,7 +51,8 @@ public static class Program
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
         if (string.IsNullOrEmpty(_configDirectory) || !Directory.Exists(_configDirectory))
-            _configDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SharpBridge");
+            _configDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SharpBridge");
         Console.Error.WriteLine(RootDirectory);
 
         ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
@@ -89,7 +88,6 @@ public static class Program
         Console.Out.Flush();
 
         if (parentProc != null)
-        {
             Task.Run(async () =>
             {
                 try
@@ -104,8 +102,7 @@ public static class Program
                     Environment.Exit(-1);
                 }
             });
-        }
-        
+
         Cmds.Init();
 
         try
@@ -124,8 +121,10 @@ public static class Program
                     var ctx = new MessageContext();
 
                     lock (Cache)
+                    {
                         foreach (var msg in Cache.Values)
                             ctx.Reply(msg);
+                    }
 
                     Task.Run(() =>
                     {
@@ -168,7 +167,6 @@ public static class Program
                 }
                 catch (ThreadAbortException)
                 {
-
                 }
                 catch (Exception e)
                 {
@@ -179,7 +177,6 @@ public static class Program
         }
         catch (ThreadAbortException)
         {
-
         }
         catch (Exception e)
         {
@@ -220,8 +217,8 @@ public static class Program
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
                 IncludeFields = true
             });
-            stream.WriteByte((byte) delimiter);
-            stream.WriteByte((byte) '\n');
+            stream.WriteByte((byte)delimiter);
+            stream.WriteByte((byte)'\n');
             stream.Flush();
 
             if (data == null) continue;
@@ -229,10 +226,10 @@ public static class Program
             stream.Write(data, 0, data.Length);
             stream.Flush();
         }
-
     }
 
-    public static void ReadLoop(Process? parentProc, MessageContext ctx, StreamReader reader, bool verbose, char delimiter = '\0')
+    public static void ReadLoop(Process? parentProc, MessageContext ctx, StreamReader reader, bool verbose,
+        char delimiter = '\0')
     {
         while (!(parentProc?.HasExited ?? false))
         {
@@ -251,19 +248,20 @@ public static class Program
             switch (cid)
             {
                 case "_ack":
+                {
+                    reader.ReadTerminatedString(delimiter);
+                    if (verbose)
+                        Console.Error.WriteLine($"[sharp] Ack'd command {uid}");
+                    lock (Cache)
                     {
-                        reader.ReadTerminatedString(delimiter);
-                        if (verbose)
-                            Console.Error.WriteLine($"[sharp] Ack'd command {uid}");
-                        lock (Cache)
-                        {
-                            if (Cache.ContainsKey(uid))
-                                Cache.Remove(uid);
-                            else
-                                Console.Error.WriteLine($"[sharp] Ack'd command that was already ack'd {uid}");
-                        }
-                        continue;
+                        if (Cache.ContainsKey(uid))
+                            Cache.Remove(uid);
+                        else
+                            Console.Error.WriteLine($"[sharp] Ack'd command that was already ack'd {uid}");
                     }
+
+                    continue;
+                }
                 case "_stop":
                     // Let's just hope everyone knows how to handle this. Truly, wishful thinking.
                     Environment.Exit(0);
@@ -299,7 +297,8 @@ public static class Program
                     output = Task.Run(() => cmd.Run(input));
                 else
                     output = cmd.Run(input)!;
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
                 Console.Error.WriteLine($"[sharp] Failed running {cid}: {e}");
                 msg.Error = "cmd failed running: " + e;
@@ -322,7 +321,10 @@ public static class Program
 
                     msg.Value = t.Result;
                     lock (Cache)
+                    {
                         Cache[uid] = msg;
+                    }
+
                     ctx.Reply(msg);
                 });
             }
@@ -330,7 +332,10 @@ public static class Program
             {
                 msg.Value = output;
                 lock (Cache)
+                {
                     Cache[uid] = msg;
+                }
+
                 ctx.Reply(msg);
             }
         }

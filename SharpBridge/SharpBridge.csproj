@@ -5,8 +5,8 @@
         <TargetFramework>net6.0</TargetFramework>
         <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
         <RootNamespace>SharpBridge</RootNamespace>
-        <ApplicationIcon />
-        <StartupObject />
+        <ApplicationIcon/>
+        <StartupObject/>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <AssemblyName>SharpBridge</AssemblyName>
         <Nullable>enable</Nullable>
