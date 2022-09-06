@@ -1,10 +1,13 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System;
+﻿using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -22,6 +25,169 @@ public static class Program
     public static readonly Encoding UTF8NoBOM = new UTF8Encoding(false);
 
     public static readonly Dictionary<string, Message> Cache = new();
+
+    public static void Main(string[] args)
+    {
+        var debug = false;
+        var verbose = false;
+
+        for (var i = 1; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--debug":
+                    debug = true;
+                    break;
+                case "--verbose":
+                    verbose = true;
+                    break;
+                case "--console":
+                    AllocConsole();
+                    break;
+            }
+        }
+
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+
+        CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+        CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+
+        if (string.IsNullOrEmpty(_configDirectory) || !Directory.Exists(_configDirectory))
+            _configDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SharpBridge");
+        Console.Error.WriteLine(RootDirectory);
+
+        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+        Process? parentProc = null;
+        var parentProcID = 0;
+
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+
+        Console.WriteLine($"{((IPEndPoint)listener.LocalEndpoint).Port}");
+
+        try
+        {
+            parentProc = Process.GetProcessById(parentProcID = int.Parse(args.Last()));
+        }
+        catch
+        {
+            Console.Error.WriteLine("[sharp] Invalid parent process ID");
+        }
+
+        if (debug)
+        {
+            Debugger.Launch();
+            Console.WriteLine(@"""debug""");
+        }
+        else
+        {
+            Console.WriteLine(@"""ok""");
+        }
+
+        Console.WriteLine(@"null");
+        Console.Out.Flush();
+
+        if (parentProc != null)
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    while (!parentProc.HasExited && parentProc.Id == parentProcID)
+                        await Task.Delay(1000);
+
+                    Environment.Exit(0);
+                }
+                catch
+                {
+                    Environment.Exit(-1);
+                }
+            });
+        }
+        
+        Cmds.Init();
+
+        try
+        {
+            while ((parentProc is { HasExited: false } && parentProc.Id == parentProcID) || parentProc == null)
+            {
+                var client = listener.AcceptTcpClient();
+                try
+                {
+                    var ep = client.Client.RemoteEndPoint?.ToString();
+                    Console.Error.WriteLine($"[sharp] New TCP connection: {ep}");
+
+                    client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReceiveTimeout, 1000);
+                    Stream stream = client.GetStream();
+
+                    var ctx = new MessageContext();
+
+                    lock (Cache)
+                        foreach (var msg in Cache.Values)
+                            ctx.Reply(msg);
+
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            WriteLoop(parentProc, ctx, stream, verbose);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.Error.WriteLine(e is ObjectDisposedException
+                                ? $"[sharp] Failed writing to {ep}: {e.GetType()}: {e.Message}"
+                                : $"[sharp] Failed writing to {ep}: {e}");
+                            client.Close();
+                        }
+                        finally
+                        {
+                            ctx.Dispose();
+                        }
+                    });
+
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var reader = new StreamReader(stream, UTF8NoBOM);
+                            ReadLoop(parentProc, ctx, reader, verbose);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.Error.WriteLine(e is ObjectDisposedException
+                                ? $"[sharp] Failed reading from {ep}: {e.GetType()}: {e.Message}"
+                                : $"[sharp] Failed reading from {ep}: {e}");
+                            client.Close();
+                        }
+                        finally
+                        {
+                            ctx.Dispose();
+                        }
+                    });
+                }
+                catch (ThreadAbortException)
+                {
+
+                }
+                catch (Exception e)
+                {
+                    Console.Error.WriteLine($"[sharp] Failed listening for TCP connection:\n{e}");
+                    client.Close();
+                }
+            }
+        }
+        catch (ThreadAbortException)
+        {
+
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine($"[sharp] Failed listening for TCP connection:\n{e}");
+        }
+
+        Console.Error.WriteLine("[sharp] Goodbye");
+    }
 
     private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
@@ -150,7 +316,7 @@ public static class Program
                         Exception e = task.Exception;
                         Console.Error.WriteLine($"[sharp] Failed running task {cid}: {e}");
                         msg.Error = "cmd task failed running: " + e;
-                        ctx.Reply(e);
+                        ctx.Reply(msg);
                         return;
                     }
 
